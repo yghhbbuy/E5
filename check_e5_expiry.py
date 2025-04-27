@@ -6,7 +6,8 @@
 - 登录成功后，导航到指定的OAuth URL以获取授权码。
 - 使用 OneDriveUploader -a 处理授权，生成 auth.json。
 - 将 auth.json 文件重命名为微软E5帐号的前缀部分（即 @ 之前的内容）+ `.json`。
-- 使用 OneDriveUploader -c 上传重命名后的授权文件到 OneDrive。
+- 将所有生成的 `.json` 文件打包成当天日期命名的 `.zip` 文件。
+- 使用 OneDriveUploader -c 上传打包后的 `.zip` 文件到 OneDrive。
 """
 import os
 import time
@@ -18,6 +19,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 from urllib.parse import urlparse, parse_qs
+from zipfile import ZipFile
+from datetime import datetime
 
 # --- Optional Notification Setup ---
 try:
@@ -144,9 +147,6 @@ def handle_one_drive_auth(username, redirect_url):
             new_auth_file = f"{prefix}.json"
             os.rename("auth.json", new_auth_file)
             List.append(f"  - 已将 auth.json 重命名为 {new_auth_file}")
-
-            # Upload {prefix}.json to OneDrive
-            upload_to_onedrive(new_auth_file)
         else:
             List.append(f"!! 授权失败: {result.stderr}")
     except FileNotFoundError:
@@ -154,19 +154,29 @@ def handle_one_drive_auth(username, redirect_url):
     except Exception as e:
         List.append(f"!! 处理授权时发生意外错误: {e}")
 
-def upload_to_onedrive(file_name):
-    """Uploads the given file to OneDrive using OneDriveUploader."""
+def zip_and_upload_all_json():
+    """Zip all generated .json files and upload the zip to OneDrive."""
     try:
-        List.append(f"  - 正在将 {file_name} 上传到 OneDrive...")
-        upload_command = [ONEDRIVE_UPLOADER, "-c", ONEDRIVE_AUTH_CONFIG, "-s", file_name]
+        # Create a zip file named with the current date
+        zip_filename = datetime.now().strftime("%Y-%m-%d") + ".zip"
+        with ZipFile(zip_filename, 'w') as zipf:
+            for file in os.listdir('.'):
+                if file.endswith('.json'):
+                    zipf.write(file)
+                    os.remove(file)  # Remove the file after adding to zip
+        List.append(f"  - 所有 .json 文件已打包为 {zip_filename}")
+
+        # Upload the zip file to OneDrive
+        List.append(f"  - 正在将 {zip_filename} 上传到 OneDrive...")
+        upload_command = [ONEDRIVE_UPLOADER, "-c", ONEDRIVE_AUTH_CONFIG, "-s", zip_filename]
         result = subprocess.run(upload_command, capture_output=True, text=True)
 
         if result.returncode == 0:
-            List.append(f"  - 成功上传文件到 OneDrive: {file_name}")
+            List.append(f"  - 成功上传文件到 OneDrive: {zip_filename}")
         else:
             List.append(f"!! 上传到 OneDrive 失败: {result.stderr}")
     except Exception as e:
-        List.append(f"!! 上传文件到 OneDrive 时发生意外错误: {e}")
+        List.append(f"!! 打包或上传文件时发生意外错误: {e}")
 
 # --- Main Function ---
 if __name__ == "__main__":
@@ -184,5 +194,8 @@ if __name__ == "__main__":
             get_oauth_code(username, password)
         except ValueError:
             List.append(f"!! 错误: 无效账号配置: {account} (应为 email-password 格式)")
+
+    # Zip and upload all .json files
+    zip_and_upload_all_json()
 
     send("MS OAuth 登录自动化", '\n'.join(List))
