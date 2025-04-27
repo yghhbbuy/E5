@@ -20,16 +20,12 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 # Ensure sendNotify.py is in your repository if you use this
 try:
     from sendNotify import send
-    # Check for necessary notification secrets passed as environment variables
-    # Add checks relevant to your sendNotify.py implementation
-    # Example: if not os.environ.get('PUSH_PLUS_TOKEN'): print("Warning: PUSH_PLUS_TOKEN secret not set.")
 except ImportError:
     print("通知文件 sendNotify.py 未找到，将仅打印到控制台。")
     def send(title, content):
         print(f"--- {title} ---")
         print(content)
         print("--- End Notification ---")
-# --- End Notification Setup ---
 
 List = [] # To store output messages
 
@@ -37,7 +33,6 @@ List = [] # To store output messages
 LOGIN_URL = 'https://admin.microsoft.com/'
 SUBSCRIPTIONS_URL = 'https://admin.microsoft.com/Adminportal/Home?source=applauncher#/subscriptions'
 TARGET_SUBSCRIPTION_NAME = "Microsoft 365 E5" 
-# Adjust if your E5 subscription name is slightly different
 
 # --- Helper Function ---
 def get_webdriver():
@@ -50,9 +45,7 @@ def get_webdriver():
     # Use a common user agent
     options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36") 
     
-    # In GitHub Actions with apt install, chromedriver should be in PATH
     try:
-       # Let Selenium find chromedriver in PATH
        driver = webdriver.Chrome(options=options) 
        List.append("  - WebDriver 初始化成功。")
        return driver
@@ -75,24 +68,21 @@ def check_e5_expiry(username, password):
 
     try:
         driver.get(LOGIN_URL)
-        # Increased wait time for potentially slow cloud environments
         wait = WebDriverWait(driver, 45) 
 
         # --- Login Step 1: Enter Email ---
         try:
             email_field = wait.until(EC.visibility_of_element_located((By.ID, "i0116")))
             email_field.send_keys(username)
-            # Use JavaScript click as a fallback if direct click fails
             next_button = wait.until(EC.element_to_be_clickable((By.ID, "idSIButton9")))
             driver.execute_script("arguments[0].click();", next_button)
-            # next_button.click() # Direct click sometimes fails
             List.append("  - 输入邮箱并点击下一步")
         except (NoSuchElementException, TimeoutException) as e:
             List.append(f"!! 错误：找不到邮箱输入框或超时。页面可能更改。 {e}")
             driver.save_screenshot(f"error_email_input_{username}.png") 
-            return # Stop check for this user
+            return 
 
-        time.sleep(random.uniform(3, 5)) # Wait for password or other prompts
+        time.sleep(random.uniform(3, 5)) 
 
         # --- Login Step 2: Enter Password ---
         try:
@@ -101,14 +91,12 @@ def check_e5_expiry(username, password):
             password_field.send_keys(password)
             signin_button = wait.until(EC.element_to_be_clickable((By.ID, "idSIButton9")))
             driver.execute_script("arguments[0].click();", signin_button)
-            # signin_button.click() 
             List.append("  - 输入密码并点击登录")
         except (NoSuchElementException, TimeoutException) as e:
-            # Check if it's asking for password again (common if email format was slightly off or domain federated)
             try:
                 if driver.find_element(By.ID, "i0118").is_displayed():
                    List.append("!! 警告: 似乎仍在密码页面，密码可能错误或登录流程异常。")
-                else: raise NoSuchElementException # Re-raise if not the password field
+                else: raise NoSuchElementException 
             except NoSuchElementException:
                 List.append(f"!! 错误：找不到密码输入框或登录按钮。密码错误或页面结构更改。 {e}")
             driver.save_screenshot(f"error_password_input_{username}.png")
@@ -117,99 +105,54 @@ def check_e5_expiry(username, password):
         # --- Login Step 3: Handle "Stay signed in?" (KMSI) ---
         try:
             kmsi_button_no = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.ID, "idBtn_Back")) # The "No" button
+                EC.element_to_be_clickable((By.ID, "idBtn_Back")) 
             )
             driver.execute_script("arguments[0].click();", kmsi_button_no)
-            # kmsi_button_no.click() 
             List.append("  - 处理 '保持登录状态?' -> 否")
         except TimeoutException:
             List.append("  - 未出现 '保持登录状态?' 弹窗 (或已超时)，继续...")
-            # It's possible login failed silently before this, or the page flow changed.
-            # Check if we are on an expected page (like the admin dashboard)
             if "admin.microsoft.com" not in driver.current_url:
                  List.append("!! 警告: 未出现KMSI弹窗，且当前URL不是Admin Center。登录可能失败。")
                  driver.save_screenshot(f"error_post_login_url_{username}.png")
-                 # Consider returning here if strict login check is needed
-        except NoSuchElementException as e:
-            List.append(f"!! 错误：无法找到 '保持登录状态?' 按钮。 {e}")
-            driver.save_screenshot(f"error_kmsi_button_{username}.png")
-            # Continue cautiously
 
         # --- Navigate to Subscriptions Page ---
         List.append("  - 尝试导航到订阅页面...")
-        time.sleep(random.uniform(4, 7)) # Give time for potential redirects
+        time.sleep(random.uniform(4, 7)) 
         
         try:
             driver.get(SUBSCRIPTIONS_URL)
-            # Wait for a reliable element on the subscriptions page.
-            # This XPath looks for the main content area of the 'Your products' page
-            # Adjust based on UI changes or language differences (e.g., '产品')
             wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-is-scrollable='true']")))
             List.append("  - 成功导航到订阅页面")
-            time.sleep(random.uniform(2, 4)) # Let dynamic content load
+            time.sleep(random.uniform(2, 4)) 
         except TimeoutException:
             List.append("!! 错误：导航到订阅页面超时或找不到预期元素。登录失败或页面结构更改。")
             driver.save_screenshot(f"error_nav_subscriptions_{username}.png")
             return
-        except Exception as e:
-             List.append(f"!! 导航到订阅页面时发生意外错误: {e}")
-             driver.save_screenshot(f"error_nav_subscriptions_{username}.png")
-             return
 
         # --- Find E5 Subscription and Expiry Date ---
         try:
             List.append(f"  - 正在查找订阅: '{TARGET_SUBSCRIPTION_NAME}'")
-            
-            # Wait for subscription items/cards to be present
-            # Selector targets potential container elements for each subscription
-            subscription_cards = wait.until(EC.presence_of_all_elements_located(
-                (By.CSS_SELECTOR, "div[role='row'], div[data-automation-id^='DetailsCard']"))) 
+            subscription_cards = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[role='row'], div[data-automation-id^='DetailsCard']"))) 
 
             found = False
-            if not subscription_cards:
-                 List.append("!! 警告: 未在页面上检测到任何订阅卡片/行元素。")
-                 driver.save_screenshot(f"error_no_sub_cards_{username}.png")
-
             for card in subscription_cards:
                 try:
-                    # Look for the title within the card first
                     title_element = card.find_element(By.CSS_SELECTOR, "div[data-automation-id='ProductTitle'], span[data-automation-id='ProductName']")
                     card_title = title_element.text
                     
                     if TARGET_SUBSCRIPTION_NAME in card_title:
                         List.append(f"  - 找到包含 '{TARGET_SUBSCRIPTION_NAME}' 的订阅卡片: '{card_title}'")
-                        
-                        # Now find the expiry date within THIS card. Be specific.
-                        # Try finding elements containing 'Expires' or '到期' (adjust for language)
-                        # Common patterns: Date might be in a span or div near the title or status.
                         try:
-                            # XPath looking for elements containing 'Expires' OR '到期' within the current card
                             expiry_element = card.find_element(By.XPATH, ".//*[contains(text(), 'Expires') or contains(text(), '到期')]")
                             expiry_text = expiry_element.text.strip()
                             List.append(f"  - >> 有效期信息: {expiry_text}")
                             found = True
-                            break # Stop after finding the first relevant E5 subscription
+                            break 
                         except NoSuchElementException:
                             List.append(f"  - !! 警告: 在 '{card_title}' 卡片中找到 E5，但未能定位 'Expires'/'到期' 文本。检查HTML结构。")
-                            # Try another common pattern - maybe a specific data-automation-id for expiry? (Inspect needed)
-                            try:
-                                expiry_alt = card.find_element(By.CSS_SELECTOR, "[data-automation-id='SubscriptionEndDate']")
-                                expiry_text = expiry_alt.text.strip()
-                                if expiry_text:
-                                   List.append(f"  - >> (备选定位) 有效期信息: {expiry_text}")
-                                   found = True
-                                   break
-                                else:
-                                   List.append(f"  - !! 备选定位 'SubscriptionEndDate' 找到但无文本。")
-                            except NoSuchElementException:
-                                List.append(f"  - !! 备选定位 'SubscriptionEndDate' 未找到。")
-                                driver.save_screenshot(f"error_find_expiry_detail_{username}.png")
-                                # Don't break yet, maybe another card structure matches better
 
                 except NoSuchElementException:
-                    # This card didn't have the expected title element, skip it silently or add debug log
-                    # List.append(f"  - Debug: Card skipped (no title found): {card.text[:50]}...") # Optional debug
-                    continue # Check next card
+                    continue 
 
             if not found:
                 List.append(f"!! 未找到与 '{TARGET_SUBSCRIPTION_NAME}' 匹配且包含可识别有效期信息的订阅。")
@@ -218,14 +161,10 @@ def check_e5_expiry(username, password):
         except TimeoutException:
             List.append("!! 错误：加载订阅列表超时。")
             driver.save_screenshot(f"error_loading_subs_{username}.png")
-        except Exception as e:
-            List.append(f"!! 查找订阅或有效期时出错: {e}")
-            driver.save_screenshot(f"error_finding_subs_{username}.png")
 
     except Exception as e:
         List.append(f"!! 发生意外的Selenium错误: {e}")
         try:
-           # Attempt to save screenshot even on unexpected errors
            driver.save_screenshot(f"error_unexpected_{username}.png") 
         except Exception as screen_err:
            List.append(f"!! (附加错误) 保存截图失败: {screen_err}")
@@ -236,12 +175,6 @@ def check_e5_expiry(username, password):
 
 
 if __name__ == '__main__':
-    # --- Random Delay (Less important in Actions, but harmless) ---
-    # delay_sec = random.randint(1, 5) 
-    # List.append(f'随机延时 {delay_sec} 秒')
-    # time.sleep(delay_sec)
-    
-    # --- Environment Variable Processing ---
     account_env_var = 'MS_E5_ACCOUNTS' 
     if account_env_var in os.environ:
         accounts_str = os.environ[account_env_var]
@@ -253,8 +186,7 @@ if __name__ == '__main__':
             
             account_counter = 0
             for i, user_pair in enumerate(users):
-                user_pair = user_pair.strip() # Remove leading/trailing whitespace
-                if not user_pair: continue # Skip empty entries if e.g. trailing & exists
+                user_pair = user_pair.strip() 
 
                 if '-' not in user_pair:
                     List.append(f'!! 错误：账号 {i+1} 格式不正确 (缺少 "-")，跳过: "{user_pair[:10]}..."')
@@ -273,7 +205,6 @@ if __name__ == '__main__':
                    check_e5_expiry(name, pwd)
                    List.append(f'======> [账号 {account_counter}: {name}] 结束 <======\n')
                    
-                   # Add delay between accounts - helps if MS throttles logins
                    sleep_time = random.uniform(8, 15)
                    List.append(f"  -- 账号间暂停 {sleep_time:.1f} 秒 --")
                    time.sleep(sleep_time) 
@@ -284,18 +215,13 @@ if __name__ == '__main__':
                    List.append(f'!! 处理账号 {i+1} ({name}) 时发生未知错误: {e}')
                    List.append(f'======> [账号 {account_counter}] 检查因错误结束 <======\n')
 
-            # --- Final Output and Notification ---
             final_output = '\n'.join(List)
             print("--- Script Execution Summary ---")
             print(final_output)
-            print("--- End Summary ---")
             
-            # Send notification using sendNotify.py if configured
             try:
                send('Microsoft E5 订阅检查报告', final_output)
-               print("通知已发送 (如果 sendNotify 配置正确)。")
             except NameError:
-               # send function wasn't defined (ImportError occurred)
                pass 
             except Exception as notify_err:
                print(f"!! 发送通知时出错: {notify_err}")
@@ -303,7 +229,6 @@ if __name__ == '__main__':
     else:
         print(f'!! 错误：未找到环境变量 {account_env_var}。请在 GitHub Secrets 中配置。')
         List.append(f'错误：未找到环境变量 {account_env_var}。')
-        # Send notification about missing configuration
         try:
             send('Microsoft E5 订阅检查错误', f'错误：未配置 GitHub Secret {account_env_var}')
         except NameError:
