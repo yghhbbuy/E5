@@ -3,9 +3,9 @@
 """
 说明: 
 - 此脚本使用Selenium自动登录Microsoft 365 Admin Center并检查E5订阅有效期。
+- 如果找不到有效期信息，会打开指定的授权URL，并将返回值保存到文件中。
 - 在GitHub Actions上运行时，浏览器和驱动程序由工作流安装。
 - 环境变量 `MS_E5_ACCOUNTS` 从 GitHub Secrets 读取: email-password&email2-password2...
-- (可选) `sendNotify.py` 用于发送通知，需要配置相应的 Secrets。
 """
 import os
 import time
@@ -29,7 +29,9 @@ except ImportError:
 # --- Configuration ---
 LOGIN_URL = 'https://admin.microsoft.com/'
 SUBSCRIPTIONS_URL = 'https://admin.microsoft.com/Adminportal/Home?source=applauncher#/subscriptions'
-TARGET_SUBSCRIPTION_NAME = "Microsoft 365 E5" 
+AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=78d4dc35-7e46-42c6-9023-2d39314433a5&response_type=code&redirect_uri=http://localhost/onedrive-login&response_mode=query&scope=offline_access%20User.Read%20Files.ReadWrite.All'
+TARGET_SUBSCRIPTION_NAME = "Microsoft 365 E5"
+OUTPUT_FILE = 'oauth_response.txt'
 List = []  # To store output messages
 
 # --- Helper Function ---
@@ -38,7 +40,7 @@ def get_webdriver():
     Initialize the WebDriver with Chrome options.
     """
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless") 
+    options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
@@ -56,6 +58,20 @@ def get_webdriver():
         List.append(f"!! 错误：初始化 WebDriver 时发生意外错误: {e}")
         return None
 
+def save_browser_response(driver, url, output_file):
+    """
+    Opens the provided URL and saves the browser's response to a file.
+    """
+    try:
+        driver.get(url)
+        time.sleep(5)  # Give some time for the page to load and redirect
+        current_url = driver.current_url
+        with open(output_file, 'w', encoding='utf-8') as file:
+            file.write(current_url)
+        List.append(f"  - 授权页面返回值已保存到 {output_file}")
+    except Exception as e:
+        List.append(f"!! 错误：保存授权页面返回值时发生错误: {e}")
+
 def check_e5_expiry(username, password):
     """Logs into Microsoft Admin Center and checks E5 subscription expiry."""
     List.append(f"开始检查账号: {username}")
@@ -66,7 +82,7 @@ def check_e5_expiry(username, password):
 
     try:
         driver.get(LOGIN_URL)
-        wait = WebDriverWait(driver, 45) 
+        wait = WebDriverWait(driver, 45)
 
         # --- Login Step 1: Enter Email ---
         email_field = wait.until(EC.visibility_of_element_located((By.ID, "i0116")))
@@ -108,7 +124,8 @@ def check_e5_expiry(username, password):
                 List.append(f"  - 找到订阅 '{TARGET_SUBSCRIPTION_NAME}' 有效期信息: {expiry_text}")
                 break
         else:
-            List.append(f"!! 未找到订阅 '{TARGET_SUBSCRIPTION_NAME}' 或有效期信息。")
+            List.append(f"!! 未找到订阅 '{TARGET_SUBSCRIPTION_NAME}' 或有效期信息。打开授权页面...")
+            save_browser_response(driver, AUTH_URL, OUTPUT_FILE)
 
     except Exception as e:
         List.append(f"!! 发生意外错误: {e}")
