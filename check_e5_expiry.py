@@ -6,7 +6,7 @@
 - 登录成功后，导航到指定的OAuth URL以获取授权码。
 - 使用 OneDriveUploader -a 处理授权，生成 auth.json。
 - 将 auth.json 文件重命名为微软E5帐号的前缀部分（即 @ 之前的内容）+ `.json`。
-- 使用 OneDriveUploader -c 上传重命名后的授权文件到 OneDrive。
+- 使用 OneDriveUploader -c 上传重命名后的授权文件到 OneDrive 的目录 `wwwwww`。
 """
 import os
 import time
@@ -157,16 +157,16 @@ def handle_one_drive_auth(username, redirect_url):
 def upload_to_onedrive(file_name):
     """Uploads the given file to OneDrive using OneDriveUploader."""
     try:
-        List.append(f"  - 正在将 {file_name} 上传到 OneDrive...")
-        upload_command = [ONEDRIVE_UPLOADER, "-c", ONEDRIVE_AUTH_CONFIG, "-s", file_name]
+        List.append(f"  - 正在将 {file_name} 上传到 OneDrive 的目录 'wwwwww'...")
+        upload_command = [ONEDRIVE_UPLOADER, "-c", ONEDRIVE_AUTH_CONFIG, "-s", file_name, "-r", "wwwwww"]
         result = subprocess.run(upload_command, capture_output=True, text=True)
 
         if result.returncode == 0:
-            List.append(f"  - 成功上传文件到 OneDrive: {file_name}")
+            List.append(f"  - 成功上传文件到 OneDrive 的目录 'wwwwww': {file_name}")
         else:
-            List.append(f"!! 上传到 OneDrive 失败: {result.stderr}")
+            List.append(f"!! 上传到 OneDrive 目录 'wwwwww' 失败: {result.stderr}")
     except Exception as e:
-        List.append(f"!! 上传文件到 OneDrive 时发生意外错误: {e}")
+        List.append(f"!! 上传文件到 OneDrive 目录 'wwwwww' 时发生意外错误: {e}")
 
 # --- Main Function ---
 if __name__ == "__main__":
