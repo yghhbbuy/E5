@@ -5,7 +5,7 @@
 - 此脚本使用Selenium自动登录Microsoft账号。
 - 登录成功后，导航到指定的OAuth URL以获取授权码。
 - 使用 OneDriveUploader -a 处理授权，生成 auth.json。
-- 将 auth.json 文件重命名为与对应账号匹配的文件名。
+- 将 auth.json 文件重命名为微软E5帐号的前缀部分（即 @ 之前的内容）+ `.json`。
 - 使用 OneDriveUploader -c 上传重命名后的授权文件到 OneDrive。
 """
 import os
@@ -130,6 +130,9 @@ def get_oauth_code(username, password):
 def handle_one_drive_auth(username, redirect_url):
     """Handles OneDriveUploader -a with the redirect URL and renames auth.json."""
     try:
+        # Extract the prefix from the email (e.g., "example@domain.com" -> "example")
+        prefix = username.split('@')[0]
+
         # Run the OneDriveUploader -a command
         List.append(f"  - 使用 OneDriveUploader 处理授权: {redirect_url}")
         auth_command = [ONEDRIVE_UPLOADER, "-a", redirect_url]
@@ -137,12 +140,12 @@ def handle_one_drive_auth(username, redirect_url):
 
         if result.returncode == 0:
             List.append("  - 授权成功，auth.json 文件已生成。")
-            # Rename auth.json to auth_{username}.json
-            new_auth_file = f"auth_{username}.json"
+            # Rename auth.json to {prefix}.json
+            new_auth_file = f"{prefix}.json"
             os.rename("auth.json", new_auth_file)
             List.append(f"  - 已将 auth.json 重命名为 {new_auth_file}")
 
-            # Upload auth_{username}.json to OneDrive
+            # Upload {prefix}.json to OneDrive
             upload_to_onedrive(new_auth_file)
         else:
             List.append(f"!! 授权失败: {result.stderr}")
