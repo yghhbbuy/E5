@@ -6,17 +6,18 @@
 - 登录成功后，导航到指定的OAuth URL以获取授权码。
 - 使用 OneDriveUploader -a 处理授权，生成 auth.json。
 - 将 auth.json 文件重命名为微软E5帐号的前缀部分（即 @ 之前的内容）+ `.json`。
-- 将所有生成的 `.json` 文件打包成固定名称 `33333.zip`。
-- 使用 OneDriveUploader -c 上传打包后的 `33333.zip` 文件到 OneDrive。
+- 使用 OneDriveUploader -c 上传重命名后的授权文件到 OneDrive 的 wwwwww 目录。
 """
 import os
+import time
+import random
 import subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
-from zipfile import ZipFile
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
+from urllib.parse import urlparse, parse_qs
 
 # --- Optional Notification Setup ---
 try:
@@ -37,6 +38,7 @@ OAUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?clie
 REDIRECT_URI_START = "http://localhost/onedrive-login"
 ONEDRIVE_UPLOADER = "/usr/local/bin/OneDriveUploader"
 ONEDRIVE_AUTH_CONFIG = "auth1106.json"
+UPLOAD_DIRECTORY = "wwwwww"  # Specify the desired remote directory
 
 # --- Helper Function ---
 def setup_onedrive_uploader():
@@ -98,6 +100,7 @@ def get_oauth_code(username, password):
         email_field.send_keys(username)
         next_button = wait.until(EC.element_to_be_clickable((By.ID, "idSIButton9")))
         driver.execute_script("arguments[0].click();", next_button)
+        time.sleep(random.uniform(4, 6))
 
         # Step 2: Enter Password
         password_field = wait.until(EC.visibility_of_element_located((By.ID, "i0118")))
@@ -116,6 +119,7 @@ def get_oauth_code(username, password):
 
         # Step 4: Navigate to OAuth URL
         driver.get(OAUTH_URL)
+        time.sleep(3)
         WebDriverWait(driver, 30).until(lambda d: REDIRECT_URI_START in d.current_url)
         redirected_url = driver.current_url
         handle_one_drive_auth(username, redirected_url)
@@ -141,6 +145,9 @@ def handle_one_drive_auth(username, redirect_url):
             new_auth_file = f"{prefix}.json"
             os.rename("auth.json", new_auth_file)
             List.append(f"  - 已将 auth.json 重命名为 {new_auth_file}")
+
+            # Upload {prefix}.json to OneDrive
+            upload_to_onedrive(new_auth_file)
         else:
             List.append(f"!! 授权失败: {result.stderr}")
     except FileNotFoundError:
@@ -148,48 +155,37 @@ def handle_one_drive_auth(username, redirect_url):
     except Exception as e:
         List.append(f"!! 处理授权时发生意外错误: {e}")
 
-def zip_and_upload_all_json():
-    """Zip all generated .json files and upload the zip to OneDrive."""
+def upload_to_onedrive(file_name):
+    """Uploads the given file to OneDrive using OneDriveUploader."""
     try:
-        # Create a zip file with a fixed name
-        zip_filename = "33333.zip"
-        with ZipFile(zip_filename, 'w') as zipf:
-            for file in os.listdir('.'):
-                if file.endswith('.json'):
-                    zipf.write(file)
-                    os.remove(file)  # Remove the file after adding to zip
-        List.append(f"  - 所有 .json 文件已打包为 {zip_filename}")
-
-        # Upload the zip file to OneDrive
-        List.append(f"  - 正在将 {zip_filename} 上传到 OneDrive...")
-        upload_command = [ONEDRIVE_UPLOADER, "-c", ONEDRIVE_AUTH_CONFIG, "-s", zip_filename]
+        List.append(f"  - 正在将 {file_name} 上传到 OneDrive 的目录 {UPLOAD_DIRECTORY}...")
+        upload_command = [ONEDRIVE_UPLOADER, "-c", ONEDRIVE_AUTH_CONFIG, "-s", file_name, "-r", UPLOAD_DIRECTORY]
         result = subprocess.run(upload_command, capture_output=True, text=True)
 
         if result.returncode == 0:
-            List.append(f"  - 成功上传文件到 OneDrive: {zip_filename}")
+            List.append(f"  - 成功上传文件到 OneDrive 的目录 {UPLOAD_DIRECTORY}: {file_name}")
         else:
             List.append(f"!! 上传到 OneDrive 失败: {result.stderr}")
     except Exception as e:
-        List.append(f"!! 打包或上传文件时发生意外错误: {e}")
+        List.append(f"!! 上传文件到 OneDrive 时发生意外错误: {e}")
 
 # --- Main Function ---
 if __name__ == "__main__":
     setup_onedrive_uploader()
 
     accounts = os.getenv('MS_E5_ACCOUNTS', '').split('&')
-    if not accounts or accounts == ['']:
-        List.append("!! 错误: 未找到环境变量 MS_E5_ACCOUNTS。")
-        send("MS OAuth 登录自动化", '\n'.join(List))
+    if not accounts:
+        List.append("!! 错误: MS_E5_ACCOUNTS 环境变量为空。")
         exit(1)
 
     for account in accounts:
-        try:
-            username, password = account.split('-')
-            get_oauth_code(username, password)
-        except ValueError:
-            List.append(f"!! 错误: 无效账号配置: {account} (应为 email-password 格式)")
+        if ':' not in account:
+            List.append(f"!! 格式错误: {account} (应为 username:password 格式)")
+            continue
 
-    # Zip and upload all .json files
-    zip_and_upload_all_json()
+        username, password = account.split(':', 1)
+        get_oauth_code(username, password)
 
-    send("MS OAuth 登录自动化", '\n'.join(List))
+    # Print final results
+    for line in List:
+        print(line)
