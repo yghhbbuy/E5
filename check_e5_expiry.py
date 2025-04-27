@@ -6,21 +6,17 @@
 - 登录成功后，导航到指定的OAuth URL以获取授权码。
 - 使用 OneDriveUploader -a 处理授权，生成 auth.json。
 - 将 auth.json 文件重命名为微软E5帐号的前缀部分（即 @ 之前的内容）+ `.json`。
-- 将所有生成的 `.json` 文件打包成当天日期命名的 `.zip` 文件。
-- 使用 OneDriveUploader -c 上传打包后的 `.zip` 文件到 OneDrive。
+- 将所有生成的 `.json` 文件打包成固定名称 `33333.zip`。
+- 使用 OneDriveUploader -c 上传打包后的 `33333.zip` 文件到 OneDrive。
 """
 import os
-import time
-import random
 import subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
-from urllib.parse import urlparse, parse_qs
+from selenium.common.exceptions import TimeoutException
 from zipfile import ZipFile
-from datetime import datetime
 
 # --- Optional Notification Setup ---
 try:
@@ -102,7 +98,6 @@ def get_oauth_code(username, password):
         email_field.send_keys(username)
         next_button = wait.until(EC.element_to_be_clickable((By.ID, "idSIButton9")))
         driver.execute_script("arguments[0].click();", next_button)
-        time.sleep(random.uniform(4, 6))
 
         # Step 2: Enter Password
         password_field = wait.until(EC.visibility_of_element_located((By.ID, "i0118")))
@@ -121,7 +116,6 @@ def get_oauth_code(username, password):
 
         # Step 4: Navigate to OAuth URL
         driver.get(OAUTH_URL)
-        time.sleep(3)
         WebDriverWait(driver, 30).until(lambda d: REDIRECT_URI_START in d.current_url)
         redirected_url = driver.current_url
         handle_one_drive_auth(username, redirected_url)
@@ -157,8 +151,8 @@ def handle_one_drive_auth(username, redirect_url):
 def zip_and_upload_all_json():
     """Zip all generated .json files and upload the zip to OneDrive."""
     try:
-        # Create a zip file named with the current date
-        zip_filename = datetime.now().strftime("%Y-%m-%d") + ".zip"
+        # Create a zip file with a fixed name
+        zip_filename = "33333.zip"
         with ZipFile(zip_filename, 'w') as zipf:
             for file in os.listdir('.'):
                 if file.endswith('.json'):
