@@ -2,9 +2,9 @@
 # -*- coding: utf8 -*-
 """
 说明: 
-- 此脚本使用Selenium自动登录Microsoft 365 Admin Center。
+- 此脚本使用 Selenium 自动登录 Microsoft 365 Admin Center。
 - 在登录后直接打开授权 URL，将浏览器的返回值保存到文件中。
-- 在GitHub Actions上运行时，浏览器和驱动程序由工作流安装。
+- 在 GitHub Actions 上运行时，浏览器和驱动程序由工作流安装。
 - 环境变量 `MS_E5_ACCOUNTS` 从 GitHub Secrets 读取: email-password&email2-password2...
 """
 import os
@@ -32,30 +32,6 @@ AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?clien
 OUTPUT_FILE = 'oauth_response.txt'
 List = []  # To store output messages
 
-# --- Helper Function ---
-def get_webdriver():
-    """
-    Initialize the WebDriver with Chrome options.
-    """
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
-    
-    try:
-        driver = webdriver.Chrome(options=options)  # Selenium will auto-detect ChromeDriver
-        List.append("  - WebDriver 初始化成功。")
-        return driver
-    except WebDriverException as e:
-        List.append(f"!! 错误：无法初始化 WebDriver: {e}")
-        List.append("!! 请检查工作流中的 ChromeDriver 和 Google Chrome 安装步骤。")
-        return None
-    except Exception as e:
-        List.append(f"!! 错误：初始化 WebDriver 时发生意外错误: {e}")
-        return None
-
 def save_browser_response(driver, url, output_file):
     """
     Opens the provided URL and saves the browser's response to a file.
@@ -73,10 +49,25 @@ def save_browser_response(driver, url, output_file):
 def handle_account(username, password):
     """Logs into Microsoft Admin Center and opens the authorization URL."""
     List.append(f"开始检查账号: {username}")
-    driver = get_webdriver()
-    if not driver:
-        List.append(f"!! 检查失败: {username} (WebDriver 初始化失败)")
-        return 
+    
+    # 初始化 WebDriver
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
+
+    try:
+        driver = webdriver.Chrome(options=options)  # Selenium will auto-detect ChromeDriver
+        List.append("  - WebDriver 初始化成功。")
+    except WebDriverException as e:
+        List.append(f"!! 错误：无法初始化 WebDriver: {e}")
+        List.append("!! 请检查工作流中的 ChromeDriver 和 Google Chrome 安装步骤。")
+        return
+    except Exception as e:
+        List.append(f"!! 错误：初始化 WebDriver 时发生意外错误: {e}")
+        return
 
     try:
         driver.get(LOGIN_URL)
