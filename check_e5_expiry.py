@@ -43,10 +43,9 @@ def get_webdriver():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36")
-
-    driver_path = "/usr/bin/chromedriver"  # Ensure this path is correct in your environment
+    
     try:
-        driver = webdriver.Chrome(executable_path=driver_path, options=options)
+        driver = webdriver.Chrome(options=options)  # Selenium will auto-detect ChromeDriver
         List.append("  - WebDriver 初始化成功。")
         return driver
     except WebDriverException as e:
