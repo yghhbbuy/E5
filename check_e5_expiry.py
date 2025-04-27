@@ -5,7 +5,7 @@
 - 此脚本使用Selenium自动登录Microsoft账号。
 - 登录成功后，导航到指定的OAuth URL以获取授权码。
 - 将包含授权码的重定向URL通过 OneDriveUploader 上传到 OneDrive。
-- 在运行脚本时，会自动下载和配置 OneDriveUploader 和 auth1106.json。
+- 使用返回的授权信息，调用 OneDriveUploader -a 处理授权流程，并将生成的 auth.json 文件重命名为与对应 E5 帐号相关的文件名。
 """
 import os
 import time
@@ -120,32 +120,32 @@ def get_oauth_code(username, password):
         time.sleep(3)
         WebDriverWait(driver, 30).until(lambda d: REDIRECT_URI_START in d.current_url)
         redirected_url = driver.current_url
-        upload_to_onedrive(username, redirected_url)
+        handle_one_drive_auth(username, redirected_url)
     except Exception as e:
         List.append(f"!! 处理账号 {username} 时发生意外错误: {e}")
     finally:
         driver.quit()
 
-def upload_to_onedrive(username, content):
-    """Uploads the given content to OneDrive using OneDriveUploader."""
+def handle_one_drive_auth(username, redirect_url):
+    """Handles OneDriveUploader -a with the redirect URL and renames auth.json."""
     try:
-        temp_file = f"oauth_redirect_{username}.txt"
-        with open(temp_file, 'w') as file:
-            file.write(content)
-
-        # Execute OneDriveUploader command
-        upload_command = [ONEDRIVE_UPLOADER, '-c', ONEDRIVE_AUTH_CONFIG, '-s', temp_file]
-        result = subprocess.run(upload_command, capture_output=True, text=True)
+        # Run the OneDriveUploader -a command
+        List.append(f"  - 使用 OneDriveUploader 处理授权: {redirect_url}")
+        auth_command = [ONEDRIVE_UPLOADER, "-a", redirect_url]
+        result = subprocess.run(auth_command, capture_output=True, text=True)
 
         if result.returncode == 0:
-            List.append(f"  - 成功上传文件到 OneDrive: {temp_file}")
+            List.append("  - 授权成功，auth.json 文件已生成。")
+            # Rename auth.json to auth_{username}.json
+            new_auth_file = f"auth_{username}.json"
+            os.rename("auth.json", new_auth_file)
+            List.append(f"  - 已将 auth.json 重命名为 {new_auth_file}")
         else:
-            List.append(f"!! 上传到 OneDrive 失败: {result.stderr}")
+            List.append(f"!! 授权失败: {result.stderr}")
+    except FileNotFoundError:
+        List.append("!! 错误: auth.json 文件未生成，可能授权失败。")
     except Exception as e:
-        List.append(f"!! 上传到 OneDrive 时发生意外错误: {e}")
-    finally:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
+        List.append(f"!! 处理授权时发生意外错误: {e}")
 
 # --- Main Function ---
 if __name__ == "__main__":
